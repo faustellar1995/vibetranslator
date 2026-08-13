@@ -12,6 +12,7 @@
 // - 气泡显示译文时按 Ctrl+C 自动复制译文
 
 struct IUIAutomation;
+struct IUIAutomationElement;
 
 class Translator : public QObject {
     Q_OBJECT
@@ -48,7 +49,10 @@ private:
     void sendCtrlC();
     void sendWmCopy();
     void copyTranslation();
+    void finishAutoRead(const QString &cur);
     QString readSelectionUia();
+    QString selectionFromElement(IUIAutomationElement *el);
+    bool isTerminalFocused() const;
 
     TranslateBubble *m_bubble;
     QString m_prompt;

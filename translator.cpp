@@ -3,6 +3,8 @@
 #include <QApplication>
 #include <QMetaObject>
 #include <QClipboard>
+#include <QScreen>
+#include <QCursor>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -97,7 +99,7 @@ void Translator::autoTick() {
     if (!m_autoMode || m_copyInProgress)
         return;
 
-    // 方式1：UI Automation 直接读取选中文字（非侵入式，Windows Terminal/记事本/编辑器等支持）
+    // 方式1：UIA 读取选中文字（非侵入式，WT/记事本/编辑器等）
     const QString sel = readSelectionUia().trimmed();
     if (!sel.isEmpty()) {
         if (sel != m_lastSource)
@@ -105,22 +107,39 @@ void Translator::autoTick() {
         return;
     }
 
-    // 方式2：WM_COPY 消息回退（部分标准文本应用支持，非侵入）
+    // 方式2：WM_COPY 回退（部分标准文本应用支持，非侵入）
     m_copyInProgress = true;
     m_autoPrevClip = QApplication::clipboard()->text();
     sendWmCopy();
     QTimer::singleShot(250, this, [this]() {
-        m_copyInProgress = false;
-        if (!m_autoMode)
-            return;
         const QString cur = QApplication::clipboard()->text();
-        if (cur.trimmed().isEmpty() || cur == m_autoPrevClip)
-            return; // 无选中或剪贴板未变化
-        const QString sel2 = cur.trimmed();
-        if (sel2 == m_lastSource)
-            return; // 与上次翻译的原文相同，跳过
-        runText(sel2);
+        if (cur != m_autoPrevClip) {
+            m_copyInProgress = false;
+            finishAutoRead(cur);
+            return;
+        }
+        // 方式3：Ctrl+C 回退（Chrome 等不响应 WM_COPY 的网站场景；终端除外避免干扰命令行）
+        if (isTerminalFocused()) {
+            m_copyInProgress = false;
+            return;
+        }
+        sendCtrlC();
+        QTimer::singleShot(300, this, [this]() {
+            m_copyInProgress = false;
+            finishAutoRead(QApplication::clipboard()->text());
+        });
     });
+}
+
+void Translator::finishAutoRead(const QString &cur) {
+    if (!m_autoMode)
+        return;
+    if (cur.trimmed().isEmpty() || cur == m_autoPrevClip)
+        return; // 无选中或剪贴板未变化
+    const QString sel = cur.trimmed();
+    if (sel == m_lastSource)
+        return; // 与上次翻译的原文相同，跳过
+    runText(sel);
 }
 
 void Translator::pollKeys() {
@@ -163,15 +182,33 @@ QString Translator::readSelectionUia() {
 #ifdef Q_OS_WIN
     if (!m_uia)
         return text;
+    // 依次尝试：焦点元素 → 鼠标位置元素（网页/Chrome 拖选不改变焦点，需按鼠标位置取）
     IUIAutomationElement *el = nullptr;
-    if (FAILED(m_uia->GetFocusedElement(&el)) || !el)
-        return text;
+    if (SUCCEEDED(m_uia->GetFocusedElement(&el)) && el) {
+        text = selectionFromElement(el);
+        el->Release();
+        if (!text.isEmpty())
+            return text;
+    }
+    QScreen *scr = QGuiApplication::primaryScreen();
+    const double dpr = scr ? scr->devicePixelRatio() : 1.0;
+    const QPoint p = QCursor::pos();
+    POINT pt = { static_cast<LONG>(p.x() * dpr), static_cast<LONG>(p.y() * dpr) };
+    el = nullptr;
+    if (SUCCEEDED(m_uia->ElementFromPoint(pt, &el)) && el) {
+        text = selectionFromElement(el);
+        el->Release();
+    }
+#endif
+    return text;
+}
+
+QString Translator::selectionFromElement(IUIAutomationElement *el) {
+    QString text;
+#ifdef Q_OS_WIN
     IUIAutomationTextPattern *pat = nullptr;
-    const HRESULT hr = el->GetCurrentPatternAs(UIA_TextPatternId,
-                                               IID_IUIAutomationTextPattern,
-                                               reinterpret_cast<void **>(&pat));
-    el->Release();
-    if (FAILED(hr) || !pat)
+    if (FAILED(el->GetCurrentPatternAs(UIA_TextPatternId, IID_IUIAutomationTextPattern,
+                                       reinterpret_cast<void **>(&pat))) || !pat)
         return text;
     IUIAutomationTextRangeArray *ranges = nullptr;
     if (FAILED(pat->GetSelection(&ranges)) || !ranges) {
@@ -198,6 +235,22 @@ QString Translator::readSelectionUia() {
     text = text.trimmed();
 #endif
     return text;
+}
+
+bool Translator::isTerminalFocused() const {
+#ifdef Q_OS_WIN
+    HWND fg = GetForegroundWindow();
+    if (!fg)
+        return false;
+    wchar_t cls[128] = {};
+    GetClassNameW(fg, cls, 128);
+    const QString c = QString::fromWCharArray(cls);
+    return c == QLatin1String("ConsoleWindowClass")            // conhost
+        || c == QLatin1String("CASCADIA_HOSTING_WINDOW_CLASS") // Windows Terminal
+        || c == QLatin1String("mintty");                       // Git Bash / mintty
+#else
+    return false;
+#endif
 }
 
 void Translator::trigger() {
