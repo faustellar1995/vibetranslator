@@ -1,0 +1,29 @@
+# ---- 构建产物 ----
+build/
+dist/
+*.o
+*.obj
+*.exe
+*.dll
+*.a
+*.lib
+
+# ---- 运行生成的配置与测试文件 ----
+translator_config.json
+test_results.txt
+*.log
+
+# ---- IDE / 编辑器 ----
+.vscode/
+.idea/
+*.user
+*.pro.user
+CMakeLists.txt.user*
+.cache/
+compile_commands.json
+
+# ---- 临时文件 ----
+*.tmp
+~$*
+*.swp
+*.bak
