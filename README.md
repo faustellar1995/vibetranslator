@@ -40,6 +40,8 @@ QT_QPA_PLATFORM=offscreen ./build/qt_translator_tests.exe
 
 `dist/qt_translator/` 为独立发布目录（含全部 Qt DLL 与插件），拷贝到任意 Windows 机器解压即可运行；`dist/qt_translator.zip` 为压缩包。
 
+> 早期 Python/PyQt5 原型（已不再维护）见 [`python_prototype/`](python_prototype/)。
+
 ## 技术说明
 
 - HTTPS 请求使用 Windows 原生 **WinHTTP**，无需随包携带 OpenSSL DLL
