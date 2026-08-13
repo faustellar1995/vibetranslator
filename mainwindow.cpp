@@ -72,7 +72,7 @@ MainWindow::MainWindow(Translator *translator, Config *config)
 
     auto *hkRow = new QHBoxLayout;
     m_hotkeyCheck = new QCheckBox(
-        QStringLiteral("启用全局翻译快捷键 Ctrl+F2 / Alt+F2（翻译选中/剪贴板文字）"));
+        QStringLiteral("启用快捷键（Alt+F2 手动翻译 / Ctrl+C 复制译文）"));
     m_hotkeyCheck->setChecked(m_config->hotkeyEnabled);
     hkRow->addWidget(m_hotkeyCheck);
     hkRow->addStretch(1);
@@ -80,9 +80,11 @@ MainWindow::MainWindow(Translator *translator, Config *config)
 
     // 自动模式行
     auto *autoRow = new QHBoxLayout;
-    m_autoModeCheck = new QCheckBox(QStringLiteral("自动模式"));
+    m_autoModeCheck = new QCheckBox(QStringLiteral("自动模式（Ctrl+F2 开关）"));
     m_autoModeCheck->setChecked(m_config->autoModeEnabled);
-    m_autoModeCheck->setToolTip(QStringLiteral("每隔设定秒数轮询当前选中文字，与上次翻译原文不同时自动翻译"));
+    m_autoModeCheck->setToolTip(QStringLiteral(
+        "每隔设定秒数非侵入式轮询当前选中文字（不干扰命令行），与上次翻译原文不同时自动翻译；\n"
+        "自动模式下手动快捷键 Alt+F2 不可用"));
     autoRow->addWidget(m_autoModeCheck);
     autoRow->addWidget(new QLabel(QStringLiteral("每")));
     m_autoSpin = new QSpinBox;
@@ -129,6 +131,9 @@ MainWindow::MainWindow(Translator *translator, Config *config)
     connect(m_promptEdit, &QPlainTextEdit::textChanged, this, &MainWindow::onPromptChanged);
     connect(m_hotkeyCheck, &QCheckBox::toggled, this, &MainWindow::onHotkeyToggled);
     connect(m_autoModeCheck, &QCheckBox::toggled, this, &MainWindow::onAutoModeToggled);
+    connect(m_translator, &Translator::autoModeChanged, this, [this](bool on) {
+        m_autoModeCheck->setChecked(on);
+    });
     connect(m_autoSpin, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &MainWindow::onAutoIntervalChanged);
     connect(m_showKeyCheck, &QCheckBox::toggled, this, [this](bool on) {
@@ -344,13 +349,12 @@ void MainWindow::showHelp() {
         "<h3>Qt 翻译助手 — 使用说明</h3>"
         "<p><b>快速翻译</b></p>"
         "<ul>"
-        "<li>选中任意窗口中的文字，按 <b>Ctrl+F2</b> 或 <b>Alt+F2</b> 立即翻译；"
-        "没有选中文字时，自动翻译剪贴板内容。</li>"
+        "<li>选中任意窗口中的文字，按 <b>Alt+F2</b> 立即翻译（选中优先，无选中时自动翻译剪贴板内容）。</li>"
         "<li>译文以半透明气泡<b>跟随鼠标</b>移动，气泡颜色会随背景自动反色，"
         "任意<b>点击鼠标</b>即可关闭气泡。</li>"
         "<li>气泡显示译文时按 <b>Ctrl+C</b>，自动把译文复制到剪贴板，可直接粘贴。</li>"
-        "<li><b>自动模式</b>：勾选后每隔设定秒数（默认 3s）轮询当前选中文字，"
-        "与上次翻译的原文不同时自动翻译，无需按键。</li>"
+        "<li><b>Ctrl+F2</b>：开关<b>自动模式</b>。启用后每隔设定秒数（默认 3s）非侵入式轮询当前选中文字，"
+        "与上次翻译的原文不同时自动翻译，无需按键；自动模式下手动快捷键 Alt+F2 不可用。</li>"
         "</ul>"
         "<p><b>API Key</b></p>"
         "<ul>"
@@ -375,7 +379,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     hide();
     if (m_tray) {
         m_tray->showMessage(QString::fromUtf8(kAppName),
-                            QStringLiteral("已最小化到托盘，按 Ctrl+F2 随时翻译"),
+                            QStringLiteral("已最小化到托盘，Alt+F2 手动翻译 / Ctrl+F2 自动模式"),
                             QSystemTrayIcon::Information, 2500);
     }
 }

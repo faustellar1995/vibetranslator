@@ -6,8 +6,10 @@
 #include "deepseek.h"
 #include "config.h"
 
-// 翻译控制器：全局快捷键 Ctrl+F2 / Alt+F2 + 剪贴板 + DeepSeek 请求（工作线程）
-// 气泡显示翻译结果时，按 Ctrl+C 自动复制译文
+// 翻译控制器：
+// - Ctrl+F2 开关自动模式（定时轮询选中内容，变化时自动翻译，非侵入式 WM_COPY）
+// - Alt+F2 手动翻译（选中优先，无选中回退剪贴板；自动模式下不可用）
+// - 气泡显示译文时按 Ctrl+C 自动复制译文
 class Translator : public QObject {
     Q_OBJECT
 public:
@@ -27,6 +29,7 @@ public:
     void runText(const QString &text);
 
 signals:
+    void autoModeChanged(bool on);
     void translated(const QString &text);
     void failed(const QString &error);
 
@@ -40,13 +43,15 @@ private slots:
 private:
     void trigger();
     void sendCtrlC();
+    void sendWmCopy();
     void copyTranslation();
 
     TranslateBubble *m_bubble;
     QString m_prompt;
     QString m_apiKey;
     bool m_enabled = true;
-    bool m_prevHotkey = false;
+    bool m_prevCtrlF2 = false;
+    bool m_prevAltF2 = false;
     bool m_prevCopy = false;
     bool m_suppressCopy = false;
     bool m_copyInProgress = false;

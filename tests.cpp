@@ -104,12 +104,21 @@ int main(int argc, char *argv[]) {
     CHECK(tr.hotkeyEnabled());
 
     LOG("== 自动模式 ==\n");
+    bool sigGot = false;
+    bool sigVal = false;
+    QObject::connect(&tr, &Translator::autoModeChanged, [&](bool on) {
+        sigGot = true;
+        sigVal = on;
+    });
     tr.setAutoMode(true);
     CHECK(tr.autoMode());
+    CHECK(sigGot && sigVal); // 开关状态变化应发出信号
     tr.setAutoIntervalMs(2500);
     CHECK(tr.autoIntervalMs() == 2500);
+    sigGot = false;
     tr.setAutoMode(false);
     CHECK(!tr.autoMode());
+    CHECK(sigGot && !sigVal);
 
     LOG("== MainWindow ==\n");
     MainWindow win(&tr, &c2);

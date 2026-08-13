@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
     win.show();
 
     QSystemTrayIcon tray(makeTrayIcon());
-    tray.setToolTip(QStringLiteral("Qt 翻译助手 — Ctrl+F2 / Alt+F2 翻译选中/剪贴板文字"));
+    tray.setToolTip(QStringLiteral("Qt 翻译助手 — Alt+F2 手动翻译 / Ctrl+F2 自动模式"));
     QMenu menu;
     QAction *actShow = menu.addAction(QStringLiteral("显示主界面"));
     QAction *actHelp = menu.addAction(QStringLiteral("使用帮助"));

@@ -8,6 +8,21 @@
 #include <windows.h>
 #endif
 
+namespace {
+// 获取当前真正拥有键盘焦点的窗口（跨进程可靠）
+HWND focusedWindow() {
+    HWND fg = GetForegroundWindow();
+    if (!fg)
+        return nullptr;
+    DWORD tid = GetWindowThreadProcessId(fg, nullptr);
+    GUITHREADINFO gti = {};
+    gti.cbSize = sizeof(gti);
+    if (GetGUIThreadInfo(tid, &gti) && gti.hwndFocus)
+        return gti.hwndFocus;
+    return fg;
+}
+} // namespace
+
 Translator::Translator(TranslateBubble *bubble, QObject *parent)
     : QObject(parent), m_bubble(bubble) {
     m_hotkeyTimer.setInterval(40);
@@ -37,16 +52,21 @@ Translator::~Translator() {
 
 void Translator::setHotkeyEnabled(bool on) {
     m_enabled = on;
-    if (m_enabled)
-        m_prevHotkey = false; // 重新启用时避免误触发
+    if (m_enabled) {
+        m_prevCtrlF2 = false;
+        m_prevAltF2 = false;
+    }
 }
 
 void Translator::setAutoMode(bool on) {
+    if (m_autoMode == on)
+        return;
     m_autoMode = on;
     if (on)
         m_autoTimer.start(m_autoIntervalMs);
     else
         m_autoTimer.stop();
+    emit autoModeChanged(on);
 }
 
 void Translator::setAutoIntervalMs(int ms) {
@@ -60,8 +80,8 @@ void Translator::autoTick() {
         return;
     m_copyInProgress = true;
     m_autoPrevClip = QApplication::clipboard()->text();
-    sendCtrlC();
-    QTimer::singleShot(300, this, [this]() {
+    sendWmCopy(); // 非侵入式：WM_COPY 消息，不发送键盘事件，避免干扰命令行
+    QTimer::singleShot(250, this, [this]() {
         m_copyInProgress = false;
         if (!m_autoMode)
             return;
@@ -81,11 +101,17 @@ void Translator::pollKeys() {
     const bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
     const bool f2 = (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
 
-    // Ctrl+F2 或 Alt+F2 触发翻译
-    const bool hot = f2 && (ctrl || alt);
-    if (m_enabled && hot && !m_prevHotkey)
+    // Ctrl+F2：自动模式开关（始终可用）
+    const bool ctrlF2 = ctrl && f2 && !alt;
+    if (ctrlF2 && !m_prevCtrlF2)
+        setAutoMode(!m_autoMode);
+    m_prevCtrlF2 = ctrlF2;
+
+    // Alt+F2：手动翻译（自动模式下手动快捷键不可用）
+    const bool altF2 = alt && f2 && !ctrl;
+    if (m_enabled && !m_autoMode && altF2 && !m_prevAltF2)
         trigger();
-    m_prevHotkey = hot;
+    m_prevAltF2 = altF2;
 
     // 气泡显示翻译结果时，Ctrl+C 自动复制译文
     const bool cc = ctrl && ((GetAsyncKeyState('C') & 0x8000) != 0);
@@ -97,19 +123,38 @@ void Translator::pollKeys() {
 #endif
 }
 
+void Translator::sendWmCopy() {
+#ifdef Q_OS_WIN
+    if (HWND hwnd = focusedWindow())
+        SendMessageW(hwnd, WM_COPY, 0, 0);
+#endif
+}
+
 void Translator::trigger() {
     if (m_copyInProgress)
-        return; // 与自动轮询冲突时忽略，避免同时模拟 Ctrl+C
+        return; // 与自动轮询冲突时忽略，避免同时复制
     m_copyInProgress = true;
     m_prevClip = QApplication::clipboard()->text();
     m_pendingPrevClip = m_prevClip;
     m_clipPollTries = 0;
     m_suppressCopy = true; // 屏蔽自己模拟的 Ctrl+C，避免误触发"复制译文"
     QTimer::singleShot(350, this, [this]() { m_suppressCopy = false; });
-    sendCtrlC();
-    // 轮询剪贴板最多 700ms：一旦发现变化（选中文字被复制）立即优先使用，
-    // 避免慢应用复制超时导致误用旧剪贴板内容
-    m_clipPollTimer.start();
+    sendWmCopy(); // 先尝试非侵入式复制选中内容
+    // 250ms 后检查是否已复制成功；未变化则回退到 Ctrl+C（兼容不支持 WM_COPY 的应用）
+    QTimer::singleShot(250, this, [this]() {
+        const QString cur = QApplication::clipboard()->text();
+        if (cur != m_pendingPrevClip) {
+            // 选中内容已复制，优先使用
+            m_clipPollTimer.stop();
+            m_copyInProgress = false;
+            runText(cur);
+            return;
+        }
+        sendCtrlC();
+        // 轮询剪贴板最多 700ms：一旦发现变化（选中文字被复制）立即优先使用，
+        // 避免慢应用复制超时导致误用旧剪贴板内容
+        m_clipPollTimer.start();
+    });
 }
 
 void Translator::sendCtrlC() {
