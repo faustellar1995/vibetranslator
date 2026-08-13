@@ -17,6 +17,8 @@ Translator::Translator(TranslateBubble *bubble, QObject *parent)
     m_clipPollTimer.setInterval(100);
     connect(&m_clipPollTimer, &QTimer::timeout, this, &Translator::checkClipboardChange);
 
+    connect(&m_autoTimer, &QTimer::timeout, this, &Translator::autoTick);
+
     m_worker = new DeepSeekWorker;
     m_worker->moveToThread(&m_workerThread);
     connect(m_worker, &DeepSeekWorker::success, this, &Translator::translated);
@@ -37,6 +39,40 @@ void Translator::setHotkeyEnabled(bool on) {
     m_enabled = on;
     if (m_enabled)
         m_prevHotkey = false; // 重新启用时避免误触发
+}
+
+void Translator::setAutoMode(bool on) {
+    m_autoMode = on;
+    if (on)
+        m_autoTimer.start(m_autoIntervalMs);
+    else
+        m_autoTimer.stop();
+}
+
+void Translator::setAutoIntervalMs(int ms) {
+    m_autoIntervalMs = qMax(1000, ms);
+    if (m_autoTimer.isActive())
+        m_autoTimer.start(m_autoIntervalMs);
+}
+
+void Translator::autoTick() {
+    if (!m_autoMode || m_copyInProgress)
+        return;
+    m_copyInProgress = true;
+    m_autoPrevClip = QApplication::clipboard()->text();
+    sendCtrlC();
+    QTimer::singleShot(300, this, [this]() {
+        m_copyInProgress = false;
+        if (!m_autoMode)
+            return;
+        const QString cur = QApplication::clipboard()->text();
+        if (cur.trimmed().isEmpty() || cur == m_autoPrevClip)
+            return; // 无选中或剪贴板未变化
+        const QString sel = cur.trimmed();
+        if (sel == m_lastSource)
+            return; // 与上次翻译的原文相同，跳过
+        runText(sel);
+    });
 }
 
 void Translator::pollKeys() {
@@ -62,6 +98,9 @@ void Translator::pollKeys() {
 }
 
 void Translator::trigger() {
+    if (m_copyInProgress)
+        return; // 与自动轮询冲突时忽略，避免同时模拟 Ctrl+C
+    m_copyInProgress = true;
     m_prevClip = QApplication::clipboard()->text();
     m_pendingPrevClip = m_prevClip;
     m_clipPollTries = 0;
@@ -87,11 +126,13 @@ void Translator::checkClipboardChange() {
     if (cur != m_pendingPrevClip) {
         // 剪贴板已变化 => 选中文字复制成功，优先使用选中内容
         m_clipPollTimer.stop();
+        m_copyInProgress = false;
         runText(cur);
         return;
     }
     if (++m_clipPollTries >= 7) { // 700ms 内无变化 => 没有选中，回退使用剪贴板内容
         m_clipPollTimer.stop();
+        m_copyInProgress = false;
         runText(m_pendingPrevClip);
     }
 }
@@ -105,6 +146,7 @@ void Translator::runText(const QString &text) {
     }
     m_bubble->showStatus(QStringLiteral("翻译中…"), TranslateBubble::Working);
     ++m_copyFlashSeq; // 使等待中的"已复制"恢复失效
+    m_lastSource = t; // 记录本次翻译的原文（自动模式据此判断是否变化）
     const QString key = resolveApiKey(m_apiKey);
     QMetaObject::invokeMethod(
         m_worker, [this, t, key]() { m_worker->translate(t, m_prompt, key); },

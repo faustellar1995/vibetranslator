@@ -11,6 +11,7 @@ class QCheckBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QSpinBox;
 class QSystemTrayIcon;
 
 class MainWindow : public QWidget {
@@ -37,6 +38,8 @@ private slots:
     void savePreset();
     void delPreset();
     void onHotkeyToggled(bool checked);
+    void onAutoModeToggled(bool checked);
+    void onAutoIntervalChanged(int sec);
     void saveApiKey();
     void testTranslate();
 
@@ -58,6 +61,8 @@ private:
     QLineEdit *m_apiKeyEdit;
     QCheckBox *m_showKeyCheck;
     QPushButton *m_saveKeyBtn;
+    QCheckBox *m_autoModeCheck;
+    QSpinBox *m_autoSpin;
     QSystemTrayIcon *m_tray = nullptr;
     QTimer m_debounce;
     bool m_loading = false;

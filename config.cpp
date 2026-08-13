@@ -60,6 +60,10 @@ Config Config::load() {
             }
             c.hotkeyEnabled = o.value(QStringLiteral("hotkey_enabled")).toBool(true);
             c.apiKey = o.value(QStringLiteral("api_key")).toString();
+            c.autoModeEnabled = o.value(QStringLiteral("auto_mode_enabled")).toBool(false);
+            c.autoIntervalSec = o.value(QStringLiteral("auto_interval_sec")).toInt(3);
+            if (c.autoIntervalSec < 1)
+                c.autoIntervalSec = 3;
         }
     }
     return c;
@@ -78,6 +82,8 @@ void Config::save() const {
     o[QStringLiteral("presets")] = arr;
     o[QStringLiteral("hotkey_enabled")] = hotkeyEnabled;
     o[QStringLiteral("api_key")] = apiKey;
+    o[QStringLiteral("auto_mode_enabled")] = autoModeEnabled;
+    o[QStringLiteral("auto_interval_sec")] = autoIntervalSec;
 
     QFile f(configPath());
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {

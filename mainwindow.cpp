@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QLineEdit>
+#include <QSpinBox>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QInputDialog>
@@ -77,6 +78,22 @@ MainWindow::MainWindow(Translator *translator, Config *config)
     hkRow->addStretch(1);
     root->addLayout(hkRow);
 
+    // 自动模式行
+    auto *autoRow = new QHBoxLayout;
+    m_autoModeCheck = new QCheckBox(QStringLiteral("自动模式"));
+    m_autoModeCheck->setChecked(m_config->autoModeEnabled);
+    m_autoModeCheck->setToolTip(QStringLiteral("每隔设定秒数轮询当前选中文字，与上次翻译原文不同时自动翻译"));
+    autoRow->addWidget(m_autoModeCheck);
+    autoRow->addWidget(new QLabel(QStringLiteral("每")));
+    m_autoSpin = new QSpinBox;
+    m_autoSpin->setRange(1, 60);
+    m_autoSpin->setValue(m_config->autoIntervalSec);
+    m_autoSpin->setSuffix(QStringLiteral(" 秒"));
+    autoRow->addWidget(m_autoSpin);
+    autoRow->addWidget(new QLabel(QStringLiteral("轮询选中内容，变化时自动翻译")));
+    autoRow->addStretch(1);
+    root->addLayout(autoRow);
+
     // API Key 设置行（优先使用环境变量 DS_KEY）
     auto *keyRow = new QHBoxLayout;
     keyRow->addWidget(new QLabel(QStringLiteral("API Key:")));
@@ -111,6 +128,9 @@ MainWindow::MainWindow(Translator *translator, Config *config)
     connect(btnTest, &QPushButton::clicked, this, &MainWindow::testTranslate);
     connect(m_promptEdit, &QPlainTextEdit::textChanged, this, &MainWindow::onPromptChanged);
     connect(m_hotkeyCheck, &QCheckBox::toggled, this, &MainWindow::onHotkeyToggled);
+    connect(m_autoModeCheck, &QCheckBox::toggled, this, &MainWindow::onAutoModeToggled);
+    connect(m_autoSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MainWindow::onAutoIntervalChanged);
     connect(m_showKeyCheck, &QCheckBox::toggled, this, [this](bool on) {
         m_apiKeyEdit->setEchoMode(on ? QLineEdit::Normal : QLineEdit::Password);
     });
@@ -122,6 +142,8 @@ MainWindow::MainWindow(Translator *translator, Config *config)
 
     refresh();
     m_loading = false;
+    m_translator->setAutoMode(m_config->autoModeEnabled);
+    m_translator->setAutoIntervalMs(m_config->autoIntervalSec * 1000);
 }
 
 void MainWindow::refresh() {
@@ -181,6 +203,8 @@ void MainWindow::saveConfig() {
         prompt = QString::fromUtf8(kDefaultPrompt);
     m_config->currentPrompt = prompt;
     m_config->hotkeyEnabled = m_translator->hotkeyEnabled();
+    m_config->autoModeEnabled = m_translator->autoMode();
+    m_config->autoIntervalSec = qMax(1, m_translator->autoIntervalMs() / 1000);
     m_config->save();
 }
 
@@ -196,6 +220,16 @@ void MainWindow::onPromptChanged() {
 
 void MainWindow::onHotkeyToggled(bool checked) {
     m_translator->setHotkeyEnabled(checked);
+    saveConfig();
+}
+
+void MainWindow::onAutoModeToggled(bool checked) {
+    m_translator->setAutoMode(checked);
+    saveConfig();
+}
+
+void MainWindow::onAutoIntervalChanged(int sec) {
+    m_translator->setAutoIntervalMs(sec * 1000);
     saveConfig();
 }
 
@@ -315,6 +349,8 @@ void MainWindow::showHelp() {
         "<li>译文以半透明气泡<b>跟随鼠标</b>移动，气泡颜色会随背景自动反色，"
         "任意<b>点击鼠标</b>即可关闭气泡。</li>"
         "<li>气泡显示译文时按 <b>Ctrl+C</b>，自动把译文复制到剪贴板，可直接粘贴。</li>"
+        "<li><b>自动模式</b>：勾选后每隔设定秒数（默认 3s）轮询当前选中文字，"
+        "与上次翻译的原文不同时自动翻译，无需按键。</li>"
         "</ul>"
         "<p><b>API Key</b></p>"
         "<ul>"

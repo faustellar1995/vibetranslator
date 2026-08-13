@@ -19,6 +19,11 @@ public:
     void setHotkeyEnabled(bool on);
     bool hotkeyEnabled() const { return m_enabled; }
 
+    void setAutoMode(bool on);
+    void setAutoIntervalMs(int ms);
+    bool autoMode() const { return m_autoMode; }
+    int autoIntervalMs() const { return m_autoIntervalMs; }
+
     void runText(const QString &text);
 
 signals:
@@ -28,6 +33,7 @@ signals:
 private slots:
     void pollKeys();
     void checkClipboardChange();
+    void autoTick();
     void onResult(const QString &text);
     void onError(const QString &error);
 
@@ -43,13 +49,19 @@ private:
     bool m_prevHotkey = false;
     bool m_prevCopy = false;
     bool m_suppressCopy = false;
+    bool m_copyInProgress = false;
     QString m_prevClip;
     QString m_pendingPrevClip;
     int m_clipPollTries = 0;
     QString m_lastResult;
+    QString m_lastSource;
     int m_copyFlashSeq = 0;
+    bool m_autoMode = false;
+    int m_autoIntervalMs = 3000;
+    QString m_autoPrevClip;
     QTimer m_hotkeyTimer;
     QTimer m_clipPollTimer;
+    QTimer m_autoTimer;
     QThread m_workerThread;
     DeepSeekWorker *m_worker = nullptr;
 };

@@ -70,6 +70,19 @@ int main(int argc, char *argv[]) {
     c2.apiKey.clear();
     c2.save();
 
+    // 自动模式配置存取
+    CHECK(c2.autoModeEnabled == false);
+    CHECK(c2.autoIntervalSec == 3);
+    c2.autoModeEnabled = true;
+    c2.autoIntervalSec = 5;
+    c2.save();
+    Config c4 = Config::load();
+    CHECK(c4.autoModeEnabled == true);
+    CHECK(c4.autoIntervalSec == 5);
+    c2.autoModeEnabled = false;
+    c2.autoIntervalSec = 3;
+    c2.save();
+
     LOG("== TranslateBubble ==\n");
     TranslateBubble bubble;
     bubble.showStatus(QStringLiteral("测试文本 ") + QString(20, QLatin1Char('x')),
@@ -89,6 +102,14 @@ int main(int argc, char *argv[]) {
     CHECK(!tr.hotkeyEnabled());
     tr.setHotkeyEnabled(true);
     CHECK(tr.hotkeyEnabled());
+
+    LOG("== 自动模式 ==\n");
+    tr.setAutoMode(true);
+    CHECK(tr.autoMode());
+    tr.setAutoIntervalMs(2500);
+    CHECK(tr.autoIntervalMs() == 2500);
+    tr.setAutoMode(false);
+    CHECK(!tr.autoMode());
 
     LOG("== MainWindow ==\n");
     MainWindow win(&tr, &c2);

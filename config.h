@@ -24,6 +24,8 @@ public:
     QVector<Preset> presets;
     bool hotkeyEnabled = true;
     QString apiKey;   // 手动设置的 API Key（留空则使用环境变量 DS_KEY）
+    bool autoModeEnabled = false;
+    int autoIntervalSec = 3;
 
     static Config load();
     void save() const;
