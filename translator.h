@@ -27,7 +27,7 @@ signals:
 
 private slots:
     void pollKeys();
-    void translateFromClipboard();
+    void checkClipboardChange();
     void onResult(const QString &text);
     void onError(const QString &error);
 
@@ -44,9 +44,12 @@ private:
     bool m_prevCopy = false;
     bool m_suppressCopy = false;
     QString m_prevClip;
+    QString m_pendingPrevClip;
+    int m_clipPollTries = 0;
     QString m_lastResult;
     int m_copyFlashSeq = 0;
     QTimer m_hotkeyTimer;
+    QTimer m_clipPollTimer;
     QThread m_workerThread;
     DeepSeekWorker *m_worker = nullptr;
 };

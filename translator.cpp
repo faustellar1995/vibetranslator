@@ -14,6 +14,9 @@ Translator::Translator(TranslateBubble *bubble, QObject *parent)
     connect(&m_hotkeyTimer, &QTimer::timeout, this, &Translator::pollKeys);
     m_hotkeyTimer.start();
 
+    m_clipPollTimer.setInterval(100);
+    connect(&m_clipPollTimer, &QTimer::timeout, this, &Translator::checkClipboardChange);
+
     m_worker = new DeepSeekWorker;
     m_worker->moveToThread(&m_workerThread);
     connect(m_worker, &DeepSeekWorker::success, this, &Translator::translated);
@@ -60,10 +63,14 @@ void Translator::pollKeys() {
 
 void Translator::trigger() {
     m_prevClip = QApplication::clipboard()->text();
+    m_pendingPrevClip = m_prevClip;
+    m_clipPollTries = 0;
     m_suppressCopy = true; // 屏蔽自己模拟的 Ctrl+C，避免误触发"复制译文"
     QTimer::singleShot(350, this, [this]() { m_suppressCopy = false; });
     sendCtrlC();
-    QTimer::singleShot(180, this, &Translator::translateFromClipboard);
+    // 轮询剪贴板最多 700ms：一旦发现变化（选中文字被复制）立即优先使用，
+    // 避免慢应用复制超时导致误用旧剪贴板内容
+    m_clipPollTimer.start();
 }
 
 void Translator::sendCtrlC() {
@@ -75,13 +82,18 @@ void Translator::sendCtrlC() {
 #endif
 }
 
-void Translator::translateFromClipboard() {
+void Translator::checkClipboardChange() {
     const QString cur = QApplication::clipboard()->text();
-    // 剪贴板变化 => 有选中文字被复制；否则用原有剪贴板内容
-    if (!cur.trimmed().isEmpty() && cur != m_prevClip)
+    if (cur != m_pendingPrevClip) {
+        // 剪贴板已变化 => 选中文字复制成功，优先使用选中内容
+        m_clipPollTimer.stop();
         runText(cur);
-    else
-        runText(m_prevClip);
+        return;
+    }
+    if (++m_clipPollTries >= 7) { // 700ms 内无变化 => 没有选中，回退使用剪贴板内容
+        m_clipPollTimer.stop();
+        runText(m_pendingPrevClip);
+    }
 }
 
 void Translator::runText(const QString &text) {
