@@ -7,9 +7,12 @@
 #include "config.h"
 
 // 翻译控制器：
-// - Ctrl+F2 开关自动模式（定时轮询选中内容，变化时自动翻译，非侵入式 WM_COPY）
+// - Ctrl+F2 开关自动模式（定时轮询选中内容，变化时自动翻译，非侵入式）
 // - Alt+F2 手动翻译（选中优先，无选中回退剪贴板；自动模式下不可用）
 // - 气泡显示译文时按 Ctrl+C 自动复制译文
+
+struct IUIAutomation;
+
 class Translator : public QObject {
     Q_OBJECT
 public:
@@ -45,6 +48,7 @@ private:
     void sendCtrlC();
     void sendWmCopy();
     void copyTranslation();
+    QString readSelectionUia();
 
     TranslateBubble *m_bubble;
     QString m_prompt;
@@ -67,6 +71,7 @@ private:
     QTimer m_hotkeyTimer;
     QTimer m_clipPollTimer;
     QTimer m_autoTimer;
+    IUIAutomation *m_uia = nullptr;
     QThread m_workerThread;
     DeepSeekWorker *m_worker = nullptr;
 };

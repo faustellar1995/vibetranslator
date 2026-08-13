@@ -6,6 +6,9 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+// UIA 客户端头文件（本地 3rdparty 拷贝自新版 mingw-w64，7.3 编译器可用）
+#define INITGUID
+#include "uiautomationclient.h"
 #endif
 
 namespace {
@@ -25,6 +28,14 @@ HWND focusedWindow() {
 
 Translator::Translator(TranslateBubble *bubble, QObject *parent)
     : QObject(parent), m_bubble(bubble) {
+#ifdef Q_OS_WIN
+    // 初始化 COM 供 UI Automation 使用（客户端需 MTA）
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (hr == RPC_E_CHANGED_MODE)
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
+                     IID_IUIAutomation, reinterpret_cast<void **>(&m_uia));
+#endif
     m_hotkeyTimer.setInterval(40);
     connect(&m_hotkeyTimer, &QTimer::timeout, this, &Translator::pollKeys);
     m_hotkeyTimer.start();
@@ -48,6 +59,13 @@ Translator::~Translator() {
     m_workerThread.wait(3000);
     delete m_worker;
     m_worker = nullptr;
+#ifdef Q_OS_WIN
+    if (m_uia) {
+        m_uia->Release();
+        m_uia = nullptr;
+    }
+    CoUninitialize();
+#endif
 }
 
 void Translator::setHotkeyEnabled(bool on) {
@@ -78,9 +96,19 @@ void Translator::setAutoIntervalMs(int ms) {
 void Translator::autoTick() {
     if (!m_autoMode || m_copyInProgress)
         return;
+
+    // 方式1：UI Automation 直接读取选中文字（非侵入式，Windows Terminal/记事本/编辑器等支持）
+    const QString sel = readSelectionUia().trimmed();
+    if (!sel.isEmpty()) {
+        if (sel != m_lastSource)
+            runText(sel);
+        return;
+    }
+
+    // 方式2：WM_COPY 消息回退（部分标准文本应用支持，非侵入）
     m_copyInProgress = true;
     m_autoPrevClip = QApplication::clipboard()->text();
-    sendWmCopy(); // 非侵入式：WM_COPY 消息，不发送键盘事件，避免干扰命令行
+    sendWmCopy();
     QTimer::singleShot(250, this, [this]() {
         m_copyInProgress = false;
         if (!m_autoMode)
@@ -88,10 +116,10 @@ void Translator::autoTick() {
         const QString cur = QApplication::clipboard()->text();
         if (cur.trimmed().isEmpty() || cur == m_autoPrevClip)
             return; // 无选中或剪贴板未变化
-        const QString sel = cur.trimmed();
-        if (sel == m_lastSource)
+        const QString sel2 = cur.trimmed();
+        if (sel2 == m_lastSource)
             return; // 与上次翻译的原文相同，跳过
-        runText(sel);
+        runText(sel2);
     });
 }
 
@@ -128,6 +156,48 @@ void Translator::sendWmCopy() {
     if (HWND hwnd = focusedWindow())
         SendMessageW(hwnd, WM_COPY, 0, 0);
 #endif
+}
+
+QString Translator::readSelectionUia() {
+    QString text;
+#ifdef Q_OS_WIN
+    if (!m_uia)
+        return text;
+    IUIAutomationElement *el = nullptr;
+    if (FAILED(m_uia->GetFocusedElement(&el)) || !el)
+        return text;
+    IUIAutomationTextPattern *pat = nullptr;
+    const HRESULT hr = el->GetCurrentPatternAs(UIA_TextPatternId,
+                                               IID_IUIAutomationTextPattern,
+                                               reinterpret_cast<void **>(&pat));
+    el->Release();
+    if (FAILED(hr) || !pat)
+        return text;
+    IUIAutomationTextRangeArray *ranges = nullptr;
+    if (FAILED(pat->GetSelection(&ranges)) || !ranges) {
+        pat->Release();
+        return text;
+    }
+    pat->Release();
+    int count = 0;
+    ranges->get_Length(&count);
+    if (count > 0) {
+        IUIAutomationTextRange *range = nullptr;
+        if (SUCCEEDED(ranges->GetElement(0, &range)) && range) {
+            BSTR bstr = nullptr;
+            if (SUCCEEDED(range->GetText(-1, &bstr)) && bstr) {
+                text = QString::fromWCharArray(bstr, SysStringLen(bstr));
+                if (text.size() > 10000)
+                    text = text.left(10000);
+                SysFreeString(bstr);
+            }
+            range->Release();
+        }
+    }
+    ranges->Release();
+    text = text.trimmed();
+#endif
+    return text;
 }
 
 void Translator::trigger() {
