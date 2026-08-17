@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QLineEdit>
+#include <QComboBox>
 #include <QSpinBox>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -96,13 +97,25 @@ MainWindow::MainWindow(Translator *translator, Config *config)
     autoRow->addStretch(1);
     root->addLayout(autoRow);
 
-    // API Key 设置行（优先使用环境变量 MIMO_KEY）
+    // 厂商 + API Key
+    auto *provRow = new QHBoxLayout;
+    provRow->addWidget(new QLabel(QStringLiteral("模型厂商:")));
+    m_providerCombo = new QComboBox;
+    for (const QString &id : LlmWorker::providerIds())
+        m_providerCombo->addItem(LlmWorker::displayNameOf(id), id);
+    {
+        const int idx = m_providerCombo->findData(m_config->provider);
+        m_providerCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+    }
+    provRow->addWidget(m_providerCombo);
+    provRow->addStretch(1);
+    root->addLayout(provRow);
+
     auto *keyRow = new QHBoxLayout;
     keyRow->addWidget(new QLabel(QStringLiteral("API Key:")));
     m_apiKeyEdit = new QLineEdit;
     m_apiKeyEdit->setEchoMode(QLineEdit::Password);
-    m_apiKeyEdit->setPlaceholderText(QStringLiteral("sk-… 留空则使用环境变量 MIMO_KEY"));
-    m_apiKeyEdit->setText(m_config->apiKey);
+    syncKeyEditFromConfig();
     keyRow->addWidget(m_apiKeyEdit, 3);
     m_showKeyCheck = new QCheckBox(QStringLiteral("显示"));
     m_showKeyCheck->setChecked(false);
@@ -139,6 +152,8 @@ MainWindow::MainWindow(Translator *translator, Config *config)
     connect(m_showKeyCheck, &QCheckBox::toggled, this, [this](bool on) {
         m_apiKeyEdit->setEchoMode(on ? QLineEdit::Normal : QLineEdit::Password);
     });
+    connect(m_providerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onProviderChanged);
     connect(m_saveKeyBtn, &QPushButton::clicked, this, &MainWindow::saveApiKey);
 
     m_debounce.setSingleShot(true);
@@ -186,18 +201,30 @@ void MainWindow::reloadPresets(const QString &selectName) {
     }
 }
 
+void MainWindow::syncKeyEditFromConfig() {
+    const QString envName = LlmWorker::keyEnvNameOf(m_config->provider);
+    m_apiKeyEdit->setPlaceholderText(
+        QStringLiteral("sk-… 留空则使用环境变量 %1").arg(envName));
+    m_apiKeyEdit->setText(m_config->apiKey());
+}
+
 void MainWindow::updateKeyLabel() {
-    const QByteArray env = qgetenv("MIMO_KEY").trimmed();
-    const QString saved = m_config->apiKey.trimmed();
+    const QString envName = LlmWorker::keyEnvNameOf(m_config->provider);
+    const QByteArray env = qgetenv(envName.toUtf8().constData()).trimmed();
+    const QString saved = m_config->apiKey().trimmed();
+    const QString vendor = LlmWorker::displayNameOf(m_config->provider);
     if (!env.isEmpty()) {
-        m_keyLabel->setText(QStringLiteral("MIMO_KEY 环境变量已设置 ✓（优先使用）"));
+        m_keyLabel->setText(
+            QStringLiteral("%1 · %2 环境变量已设置 ✓（优先使用）").arg(vendor, envName));
         m_keyLabel->setStyleSheet(QStringLiteral("color:#3c9e4a;"));
     } else if (!saved.isEmpty()) {
-        m_keyLabel->setText(QStringLiteral("使用已保存的 API Key（…%1）").arg(saved.right(6)));
+        m_keyLabel->setText(QStringLiteral("%1 · 使用已保存的 API Key（…%2）")
+                                .arg(vendor, saved.right(6)));
         m_keyLabel->setStyleSheet(QStringLiteral("color:#3c9e4a;"));
     } else {
         m_keyLabel->setText(
-            QStringLiteral("⚠ 未设置 API Key：请在上方输入并保存，或配置环境变量 MIMO_KEY"));
+            QStringLiteral("⚠ %1：请输入并保存 Key，或配置环境变量 %2")
+                .arg(vendor, envName));
         m_keyLabel->setStyleSheet(QStringLiteral("color:#c0392b;"));
     }
 }
@@ -210,6 +237,7 @@ void MainWindow::saveConfig() {
     m_config->hotkeyEnabled = m_translator->hotkeyEnabled();
     m_config->autoModeEnabled = m_translator->autoMode();
     m_config->autoIntervalSec = qMax(1, m_translator->autoIntervalMs() / 1000);
+    m_config->provider = m_translator->provider();
     m_config->save();
 }
 
@@ -238,9 +266,23 @@ void MainWindow::onAutoIntervalChanged(int sec) {
     saveConfig();
 }
 
+void MainWindow::onProviderChanged(int index) {
+    if (m_loading || index < 0)
+        return;
+    // 切换前把当前输入框内容写回对应厂商 Key（未点保存也能保留）
+    m_config->setApiKey(m_apiKeyEdit->text().trimmed());
+    const QString id = m_providerCombo->itemData(index).toString();
+    m_config->provider = id;
+    m_translator->setProvider(id);
+    syncKeyEditFromConfig();
+    m_translator->setApiKey(m_config->apiKey());
+    saveConfig();
+    updateKeyLabel();
+}
+
 void MainWindow::saveApiKey() {
-    m_config->apiKey = m_apiKeyEdit->text().trimmed();
-    m_translator->setApiKey(m_config->apiKey);
+    m_config->setApiKey(m_apiKeyEdit->text().trimmed());
+    m_translator->setApiKey(m_config->apiKey());
     saveConfig();
     updateKeyLabel();
     m_saveKeyBtn->setText(QStringLiteral("已保存 ✓"));
@@ -356,10 +398,10 @@ void MainWindow::showHelp() {
         "<li><b>Ctrl+F2</b>：开关<b>自动模式</b>。启用后每隔设定秒数（默认 3s）非侵入式轮询当前选中文字，"
         "与上次翻译的原文不同时自动翻译，无需按键；自动模式下手动快捷键 Alt+F2 不可用。</li>"
         "</ul>"
-        "<p><b>API Key</b></p>"
+        "<p><b>模型厂商</b></p>"
         "<ul>"
-        "<li>优先使用环境变量 <b>MIMO_KEY</b>；也可以在主界面输入 Key 后点「保存」（自动存取）。</li>"
-        "<li>默认模型：小米 MiMo <b>mimo-v2.5</b>（OpenAI 兼容 API）。</li>"
+        "<li>支持 <b>MiMo</b>（默认，模型 mimo-v2.5）与 <b>DeepSeek</b>（模型 deepseek-chat），可在主界面下拉切换。</li>"
+        "<li>MiMo 优先环境变量 <b>MIMO_KEY</b>；DeepSeek 优先 <b>DS_KEY</b>；也可分别保存 Key。</li>"
         "</ul>"
         "<p><b>Prompt 与预设</b></p>"
         "<ul>"

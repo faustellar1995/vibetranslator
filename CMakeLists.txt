@@ -24,7 +24,7 @@ endif()
 
 set(APP_SOURCES
     config.h config.cpp
-    mimo.h mimo.cpp
+    llm.h llm.cpp
     translatebubble.h translatebubble.cpp
     translator.h translator.cpp
     mainwindow.h mainwindow.cpp

@@ -29,6 +29,12 @@ static QString configPath() {
     return QCoreApplication::applicationDirPath() + QStringLiteral("/translator_config.json");
 }
 
+static QString normalizeProvider(const QString &raw) {
+    if (raw.trimmed().compare(QLatin1String("deepseek"), Qt::CaseInsensitive) == 0)
+        return QStringLiteral("deepseek");
+    return LlmWorker::defaultProviderId();
+}
+
 Config Config::load() {
     Config c;
     c.currentPrompt = QString::fromUtf8(kDefaultPrompt);
@@ -59,7 +65,17 @@ Config Config::load() {
                     c.presets = ps;
             }
             c.hotkeyEnabled = o.value(QStringLiteral("hotkey_enabled")).toBool(true);
-            c.apiKey = o.value(QStringLiteral("api_key")).toString();
+            c.provider = normalizeProvider(o.value(QStringLiteral("provider")).toString());
+            c.mimoApiKey = o.value(QStringLiteral("mimo_api_key")).toString();
+            c.deepseekApiKey = o.value(QStringLiteral("deepseek_api_key")).toString();
+            // 兼容旧版单一 api_key：填入当前厂商（默认 mimo）
+            const QString legacy = o.value(QStringLiteral("api_key")).toString().trimmed();
+            if (!legacy.isEmpty()) {
+                if (c.provider == QLatin1String("deepseek") && c.deepseekApiKey.isEmpty())
+                    c.deepseekApiKey = legacy;
+                else if (c.mimoApiKey.isEmpty())
+                    c.mimoApiKey = legacy;
+            }
             c.autoModeEnabled = o.value(QStringLiteral("auto_mode_enabled")).toBool(false);
             c.autoIntervalSec = o.value(QStringLiteral("auto_interval_sec")).toInt(3);
             if (c.autoIntervalSec < 1)
@@ -81,7 +97,9 @@ void Config::save() const {
     }
     o[QStringLiteral("presets")] = arr;
     o[QStringLiteral("hotkey_enabled")] = hotkeyEnabled;
-    o[QStringLiteral("api_key")] = apiKey;
+    o[QStringLiteral("provider")] = provider;
+    o[QStringLiteral("mimo_api_key")] = mimoApiKey;
+    o[QStringLiteral("deepseek_api_key")] = deepseekApiKey;
     o[QStringLiteral("auto_mode_enabled")] = autoModeEnabled;
     o[QStringLiteral("auto_interval_sec")] = autoIntervalSec;
 

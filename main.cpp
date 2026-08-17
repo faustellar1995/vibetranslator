@@ -44,7 +44,8 @@ int main(int argc, char *argv[]) {
     TranslateBubble bubble;
     Translator translator(&bubble);
     translator.setPrompt(config.currentPrompt);
-    translator.setApiKey(config.apiKey);
+    translator.setProvider(config.provider);
+    translator.setApiKey(config.apiKey());
     translator.setHotkeyEnabled(config.hotkeyEnabled);
 
     MainWindow win(&translator, &config);
@@ -91,11 +92,11 @@ int main(int argc, char *argv[]) {
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&win]() { win.saveConfig(); });
 
-    if (resolveApiKey(config.apiKey).isEmpty()) {
-        QTimer::singleShot(800, [&tray]() {
-            tray.showMessage(QStringLiteral("Qt 翻译助手"),
-                             QStringLiteral("未设置 API Key：请打开主界面设置，或配置环境变量 MIMO_KEY"),
-                             QSystemTrayIcon::Warning, 5000);
+    if (resolveApiKey(config.provider, config.apiKey()).isEmpty()) {
+        const QString tip = QStringLiteral("未设置 API Key：请打开主界面设置，或配置环境变量 %1")
+                                .arg(LlmWorker::keyEnvNameOf(config.provider));
+        QTimer::singleShot(800, [&tray, tip]() {
+            tray.showMessage(QStringLiteral("Qt 翻译助手"), tip, QSystemTrayIcon::Warning, 5000);
         });
     }
 

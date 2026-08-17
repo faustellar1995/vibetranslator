@@ -11,7 +11,7 @@
 #include <QFile>
 
 #include "config.h"
-#include "mimo.h"
+#include "llm.h"
 #include "translatebubble.h"
 #include "translator.h"
 #include "mainwindow.h"
@@ -54,20 +54,27 @@ int main(int argc, char *argv[]) {
     CHECK(c2.presets.size() == 4);
     CHECK(c2.hotkeyEnabled == true);
 
-    // API Key：存取 + MIMO_KEY 优先级
-    c2.apiKey = QStringLiteral("sk-saved-key-123456");
+    // API Key：存取 + MIMO_KEY / DS_KEY 优先级
+    c2.provider = QStringLiteral("mimo");
+    c2.mimoApiKey = QStringLiteral("sk-saved-key-123456");
     c2.save();
     Config c3 = Config::load();
-    CHECK(c3.apiKey == QStringLiteral("sk-saved-key-123456"));
-    const QByteArray savedEnv = qgetenv("MIMO_KEY");
+    CHECK(c3.mimoApiKey == QStringLiteral("sk-saved-key-123456"));
+    const QByteArray savedMimo = qgetenv("MIMO_KEY");
+    const QByteArray savedDs = qgetenv("DS_KEY");
     qunsetenv("MIMO_KEY");
-    CHECK(resolveApiKey(QStringLiteral("sk-saved-key-123456")) ==
-          QStringLiteral("sk-saved-key-123456")); // 无环境变量时用已保存 Key
-    CHECK(resolveApiKey(QString()).isEmpty());
-    if (!savedEnv.isEmpty())
-        qputenv("MIMO_KEY", savedEnv);
-    CHECK(!resolveApiKey(QString()).isEmpty()); // 有 MIMO_KEY 时优先使用（本机已设置）
-    c2.apiKey.clear();
+    qunsetenv("DS_KEY");
+    CHECK(resolveApiKey(QStringLiteral("mimo"), QStringLiteral("sk-saved-key-123456")) ==
+          QStringLiteral("sk-saved-key-123456"));
+    CHECK(resolveApiKey(QStringLiteral("mimo"), QString()).isEmpty());
+    CHECK(resolveApiKey(QStringLiteral("deepseek"), QStringLiteral("sk-ds")) ==
+          QStringLiteral("sk-ds"));
+    if (!savedMimo.isEmpty())
+        qputenv("MIMO_KEY", savedMimo);
+    if (!savedDs.isEmpty())
+        qputenv("DS_KEY", savedDs);
+    c2.mimoApiKey.clear();
+    c2.deepseekApiKey.clear();
     c2.save();
 
     // 自动模式配置存取
@@ -132,26 +139,28 @@ int main(int argc, char *argv[]) {
     QCoreApplication::processEvents();
     CHECK(!win.isVisible()); // 关闭应隐藏而非退出
 
-    LOG("== MiMo API (network) ==\n");
-    MimoWorker worker;
+    LOG("== LlmWorker API (network, default provider) ==\n");
+    LlmWorker *worker = LlmWorker::create(LlmWorker::defaultProviderId());
     QEventLoop loop;
     bool apiDone = false;
     bool apiOk = false;
-    QObject::connect(&worker, &MimoWorker::success, [&](const QString &r) {
+    QObject::connect(worker, &LlmWorker::success, [&](const QString &r) {
         LOG("  API result: %s\n", r.toUtf8().constData());
         apiOk = true;
         apiDone = true;
         loop.quit();
     });
-    QObject::connect(&worker, &MimoWorker::failure, [&](const QString &e) {
+    QObject::connect(worker, &LlmWorker::failure, [&](const QString &e) {
         LOG("  API failure: %s\n", e.toUtf8().constData());
         apiDone = true;
         loop.quit();
     });
     QTimer::singleShot(40000, &loop, &QEventLoop::quit);
-    worker.translate(QStringLiteral("Hello, world! This is a quick translation test."),
-                     QString::fromUtf8(kDefaultPrompt), resolveApiKey(QString()));
+    worker->translate(QStringLiteral("Hello, world! This is a quick translation test."),
+                      QString::fromUtf8(kDefaultPrompt),
+                      resolveApiKey(LlmWorker::defaultProviderId(), QString()));
     loop.exec();
+    delete worker;
     CHECK(apiDone && apiOk);
 
     LOG("%s failures=%d\n", g_fail == 0 ? "ALL TESTS PASSED" : "SOME TESTS FAILED", g_fail);

@@ -3,7 +3,7 @@
 #include <QTimer>
 #include <QThread>
 #include "translatebubble.h"
-#include "mimo.h"
+#include "llm.h"
 #include "config.h"
 
 // 翻译控制器：
@@ -22,6 +22,8 @@ public:
 
     void setPrompt(const QString &p) { m_prompt = p; }
     void setApiKey(const QString &k) { m_apiKey = k.trimmed(); }
+    void setProvider(const QString &providerId);
+    QString provider() const { return m_provider; }
     void setHotkeyEnabled(bool on);
     bool hotkeyEnabled() const { return m_enabled; }
 
@@ -45,6 +47,7 @@ private slots:
     void onError(const QString &error);
 
 private:
+    void recreateWorker();
     void trigger();
     void sendCtrlC();
     void sendWmCopy();
@@ -57,6 +60,7 @@ private:
     TranslateBubble *m_bubble;
     QString m_prompt;
     QString m_apiKey;
+    QString m_provider = LlmWorker::defaultProviderId();
     bool m_enabled = true;
     bool m_prevCtrlF2 = false;
     bool m_prevAltF2 = false;
@@ -77,5 +81,5 @@ private:
     QTimer m_autoTimer;
     IUIAutomation *m_uia = nullptr;
     QThread m_workerThread;
-    MimoWorker *m_worker = nullptr;
+    LlmWorker *m_worker = nullptr;
 };

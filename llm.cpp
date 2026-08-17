@@ -1,9 +1,8 @@
-#include "mimo.h"
+#include "llm.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QString>
 #include <QByteArray>
 
 #include <windows.h>
@@ -12,13 +11,38 @@
 #include <string>
 #include <vector>
 
-MimoWorker::MimoWorker(QObject *parent) : QObject(parent) {}
+LlmWorker::LlmWorker(QObject *parent) : QObject(parent) {}
 
-void MimoWorker::translate(const QString &text, const QString &systemPrompt,
-                           const QString &apiKey) {
+QString LlmWorker::defaultProviderId() { return QStringLiteral("mimo"); }
+
+QStringList LlmWorker::providerIds() {
+    return {QStringLiteral("mimo"), QStringLiteral("deepseek")};
+}
+
+QString LlmWorker::displayNameOf(const QString &providerId) {
+    if (providerId == QLatin1String("deepseek"))
+        return QStringLiteral("DeepSeek");
+    return QStringLiteral("MiMo");
+}
+
+QString LlmWorker::keyEnvNameOf(const QString &providerId) {
+    if (providerId == QLatin1String("deepseek"))
+        return QStringLiteral("DS_KEY");
+    return QStringLiteral("MIMO_KEY");
+}
+
+LlmWorker *LlmWorker::create(const QString &providerId, QObject *parent) {
+    if (providerId == QLatin1String("deepseek"))
+        return new DeepSeekLlm(parent);
+    return new MimoLlm(parent);
+}
+
+void LlmWorker::translate(const QString &text, const QString &systemPrompt,
+                          const QString &apiKey) {
     const QString key = apiKey.trimmed();
     if (key.isEmpty()) {
-        emit failure(QStringLiteral("未设置 API Key（请在主界面设置，或配置环境变量 MIMO_KEY）"));
+        emit failure(QStringLiteral("未设置 API Key（请在主界面设置，或配置环境变量 %1）")
+                         .arg(keyEnvName()));
         return;
     }
 
@@ -32,9 +56,8 @@ void MimoWorker::translate(const QString &text, const QString &systemPrompt,
     msgs.append(sys);
     msgs.append(usr);
 
-    // 默认模型 mimo-v2.5（RPM 100 / TPM 10M，见官方 Rate Limit 文档）
     QJsonObject body;
-    body[QStringLiteral("model")] = QStringLiteral("mimo-v2.5");
+    body[QStringLiteral("model")] = model();
     body[QStringLiteral("messages")] = msgs;
     body[QStringLiteral("temperature")] = 0.3;
     body[QStringLiteral("stream")] = false;
@@ -46,15 +69,16 @@ void MimoWorker::translate(const QString &text, const QString &systemPrompt,
         emit failure(QStringLiteral("WinHttpOpen 失败 (错误码 %1)").arg((int)GetLastError()));
         return;
     }
-    // OpenAI 兼容：https://api.xiaomimimo.com/v1/chat/completions
-    HINTERNET hConnect = WinHttpConnect(hSession, L"api.xiaomimimo.com",
-                                        INTERNET_DEFAULT_HTTPS_PORT, 0);
+
+    const std::wstring hostW = host().toStdWString();
+    const std::wstring pathW = path().toStdWString();
+    HINTERNET hConnect = WinHttpConnect(hSession, hostW.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) {
         emit failure(QStringLiteral("WinHttpConnect 失败 (错误码 %1)").arg((int)GetLastError()));
         WinHttpCloseHandle(hSession);
         return;
     }
-    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", L"/v1/chat/completions", nullptr,
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", pathW.c_str(), nullptr,
                                             WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
                                             WINHTTP_FLAG_SECURE);
     if (!hRequest) {
@@ -120,7 +144,8 @@ void MimoWorker::translate(const QString &text, const QString &systemPrompt,
     const QByteArray bodyBytes(respBody.data(), (int)respBody.size());
     if (status != 200) {
         emit failure(QStringLiteral("API 错误 HTTP %1: %2")
-                         .arg(status).arg(QString::fromUtf8(bodyBytes.left(300))));
+                         .arg(status)
+                         .arg(QString::fromUtf8(bodyBytes.left(300))));
         return;
     }
     QJsonParseError err;
@@ -130,8 +155,7 @@ void MimoWorker::translate(const QString &text, const QString &systemPrompt,
                          .arg(QString::fromUtf8(bodyBytes.left(300))));
         return;
     }
-    const QJsonArray choices =
-        doc.object().value(QStringLiteral("choices")).toArray();
+    const QJsonArray choices = doc.object().value(QStringLiteral("choices")).toArray();
     if (choices.isEmpty()) {
         emit failure(QStringLiteral("响应解析失败: %1")
                          .arg(QString::fromUtf8(bodyBytes.left(300))));

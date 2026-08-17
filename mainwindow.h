@@ -11,6 +11,7 @@ class QCheckBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QComboBox;
 class QSpinBox;
 class QSystemTrayIcon;
 
@@ -40,6 +41,7 @@ private slots:
     void onHotkeyToggled(bool checked);
     void onAutoModeToggled(bool checked);
     void onAutoIntervalChanged(int sec);
+    void onProviderChanged(int index);
     void saveApiKey();
     void testTranslate();
 
@@ -50,6 +52,7 @@ private:
     void refresh();
     void reloadPresets(const QString &selectName = QString());
     void updateKeyLabel();
+    void syncKeyEditFromConfig();
     bool presetNameExists(const QString &name) const;
 
     Translator *m_translator;
@@ -58,6 +61,7 @@ private:
     QListWidget *m_presetList;
     QCheckBox *m_hotkeyCheck;
     QLabel *m_keyLabel;
+    QComboBox *m_providerCombo;
     QLineEdit *m_apiKeyEdit;
     QCheckBox *m_showKeyCheck;
     QPushButton *m_saveKeyBtn;

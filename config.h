@@ -3,6 +3,8 @@
 #include <QVector>
 #include <QByteArray>
 
+#include "llm.h"
+
 extern const char *kDefaultPrompt;
 
 struct Preset {
@@ -10,9 +12,10 @@ struct Preset {
     QString prompt;
 };
 
-// 解析实际使用的 API Key：优先环境变量 MIMO_KEY，否则用已保存的 Key
-inline QString resolveApiKey(const QString &savedKey) {
-    const QByteArray env = qgetenv("MIMO_KEY").trimmed();
+// 按厂商解析 Key：优先对应环境变量（MIMO_KEY / DS_KEY），否则用已保存 Key
+inline QString resolveApiKey(const QString &providerId, const QString &savedKey) {
+    const QByteArray envName = LlmWorker::keyEnvNameOf(providerId).toUtf8();
+    const QByteArray env = qgetenv(envName.constData()).trimmed();
     if (!env.isEmpty())
         return QString::fromUtf8(env);
     return savedKey.trimmed();
@@ -23,9 +26,19 @@ public:
     QString currentPrompt;
     QVector<Preset> presets;
     bool hotkeyEnabled = true;
-    QString apiKey;   // 手动设置的 API Key（留空则使用环境变量 MIMO_KEY）
+    QString provider = LlmWorker::defaultProviderId(); // "mimo" | "deepseek"
+    QString mimoApiKey;
+    QString deepseekApiKey;
     bool autoModeEnabled = false;
     int autoIntervalSec = 3;
+
+    QString &apiKeyRef() {
+        return provider == QLatin1String("deepseek") ? deepseekApiKey : mimoApiKey;
+    }
+    QString apiKey() const {
+        return provider == QLatin1String("deepseek") ? deepseekApiKey : mimoApiKey;
+    }
+    void setApiKey(const QString &key) { apiKeyRef() = key.trimmed(); }
 
     static Config load();
     void save() const;

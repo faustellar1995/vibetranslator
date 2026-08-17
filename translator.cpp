@@ -49,13 +49,35 @@ Translator::Translator(TranslateBubble *bubble, QObject *parent)
 
     connect(&m_autoTimer, &QTimer::timeout, this, &Translator::autoTick);
 
-    m_worker = new MimoWorker;
-    m_worker->moveToThread(&m_workerThread);
-    connect(m_worker, &MimoWorker::success, this, &Translator::translated);
-    connect(m_worker, &MimoWorker::failure, this, &Translator::failed);
     connect(this, &Translator::translated, this, &Translator::onResult);
     connect(this, &Translator::failed, this, &Translator::onError);
     m_workerThread.start();
+    recreateWorker();
+}
+
+void Translator::recreateWorker() {
+    if (m_worker) {
+        disconnect(m_worker, nullptr, this, nullptr);
+        m_worker->deleteLater();
+        m_worker = nullptr;
+    }
+    m_worker = LlmWorker::create(m_provider);
+    m_worker->moveToThread(&m_workerThread);
+    connect(m_worker, &LlmWorker::success, this, &Translator::translated);
+    connect(m_worker, &LlmWorker::failure, this, &Translator::failed);
+}
+
+void Translator::setProvider(const QString &providerId) {
+    const QString id = providerId.trimmed().isEmpty()
+                           ? LlmWorker::defaultProviderId()
+                           : providerId.trimmed().toLower();
+    const QString norm =
+        (id == QLatin1String("deepseek")) ? QStringLiteral("deepseek")
+                                          : LlmWorker::defaultProviderId();
+    if (norm == m_provider && m_worker)
+        return;
+    m_provider = norm;
+    recreateWorker();
 }
 
 Translator::~Translator() {
@@ -317,7 +339,7 @@ void Translator::runText(const QString &text) {
     m_bubble->showStatus(QStringLiteral("翻译中…"), TranslateBubble::Working);
     ++m_copyFlashSeq; // 使等待中的"已复制"恢复失效
     m_lastSource = t; // 记录本次翻译的原文（自动模式据此判断是否变化）
-    const QString key = resolveApiKey(m_apiKey);
+    const QString key = resolveApiKey(m_provider, m_apiKey);
     QMetaObject::invokeMethod(
         m_worker, [this, t, key]() { m_worker->translate(t, m_prompt, key); },
         Qt::QueuedConnection);
