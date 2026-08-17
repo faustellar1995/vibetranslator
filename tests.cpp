@@ -1,5 +1,5 @@
 #include <cstdio>
-// 控制台测试程序：验证配置/气泡/控制器/主界面/DeepSeek API
+// 控制台测试程序：验证配置/气泡/控制器/主界面/MiMo API
 #include <QApplication>
 #include <QCoreApplication>
 #include <QEventLoop>
@@ -11,7 +11,7 @@
 #include <QFile>
 
 #include "config.h"
-#include "deepseek.h"
+#include "mimo.h"
 #include "translatebubble.h"
 #include "translator.h"
 #include "mainwindow.h"
@@ -54,19 +54,19 @@ int main(int argc, char *argv[]) {
     CHECK(c2.presets.size() == 4);
     CHECK(c2.hotkeyEnabled == true);
 
-    // API Key：存取 + DS_KEY 优先级
+    // API Key：存取 + MIMO_KEY 优先级
     c2.apiKey = QStringLiteral("sk-saved-key-123456");
     c2.save();
     Config c3 = Config::load();
     CHECK(c3.apiKey == QStringLiteral("sk-saved-key-123456"));
-    const QByteArray savedEnv = qgetenv("DS_KEY");
-    qunsetenv("DS_KEY");
+    const QByteArray savedEnv = qgetenv("MIMO_KEY");
+    qunsetenv("MIMO_KEY");
     CHECK(resolveApiKey(QStringLiteral("sk-saved-key-123456")) ==
           QStringLiteral("sk-saved-key-123456")); // 无环境变量时用已保存 Key
     CHECK(resolveApiKey(QString()).isEmpty());
     if (!savedEnv.isEmpty())
-        qputenv("DS_KEY", savedEnv);
-    CHECK(!resolveApiKey(QString()).isEmpty()); // 有 DS_KEY 时优先使用（本机已设置）
+        qputenv("MIMO_KEY", savedEnv);
+    CHECK(!resolveApiKey(QString()).isEmpty()); // 有 MIMO_KEY 时优先使用（本机已设置）
     c2.apiKey.clear();
     c2.save();
 
@@ -132,18 +132,18 @@ int main(int argc, char *argv[]) {
     QCoreApplication::processEvents();
     CHECK(!win.isVisible()); // 关闭应隐藏而非退出
 
-    LOG("== DeepSeek API (network) ==\n");
-    DeepSeekWorker worker;
+    LOG("== MiMo API (network) ==\n");
+    MimoWorker worker;
     QEventLoop loop;
     bool apiDone = false;
     bool apiOk = false;
-    QObject::connect(&worker, &DeepSeekWorker::success, [&](const QString &r) {
+    QObject::connect(&worker, &MimoWorker::success, [&](const QString &r) {
         LOG("  API result: %s\n", r.toUtf8().constData());
         apiOk = true;
         apiDone = true;
         loop.quit();
     });
-    QObject::connect(&worker, &DeepSeekWorker::failure, [&](const QString &e) {
+    QObject::connect(&worker, &MimoWorker::failure, [&](const QString &e) {
         LOG("  API failure: %s\n", e.toUtf8().constData());
         apiDone = true;
         loop.quit();

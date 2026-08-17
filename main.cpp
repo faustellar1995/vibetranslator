@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
     if (resolveApiKey(config.apiKey).isEmpty()) {
         QTimer::singleShot(800, [&tray]() {
             tray.showMessage(QStringLiteral("Qt 翻译助手"),
-                             QStringLiteral("未设置 API Key：请打开主界面设置，或配置环境变量 DS_KEY"),
+                             QStringLiteral("未设置 API Key：请打开主界面设置，或配置环境变量 MIMO_KEY"),
                              QSystemTrayIcon::Warning, 5000);
         });
     }

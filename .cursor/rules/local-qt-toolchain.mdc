@@ -1,0 +1,29 @@
+---
+description: 本机 Qt/C++ 构建必须使用 MSVC 工具链（对齐 local-cpp / local-pcl-qt），禁止默认 MinGW
+alwaysApply: true
+---
+
+# Local C++ / Qt 工具链（MSVC）
+
+构建本项目时遵循：
+
+- `C:\Users\abcde\.cursor\skills\local-cpp\SKILL.md`（本机 C++ 默认约定，已验证）
+- `d:\.pi\agent\skills\local-pcl-qt\SKILL.md`
+- `d:\.pi\agent\skills\local-qt\SKILL.md`（**默认 msvc2017_64**）
+
+## 默认工具链
+
+| 组件 | 路径 |
+|------|------|
+| Qt 5.14.2 MSVC 2017 64-bit | `D:\Qt\Qt5.14.2\5.14.2\msvc2017_64` |
+| Visual Studio 2022 Professional | `C:\Program Files\Microsoft Visual Studio\2022\Professional` |
+| CMake | `D:\Program Files\CMake\bin\cmake.exe` |
+
+本项目入口：`build.bat` / `run.bat` / `package.bat`（优先 **cmd**）。
+
+UI Automation 用 Windows SDK `#include <UIAutomation.h>`（在 Qt 头之前），不要再引入 `3rdparty` WIDL 头。
+
+## 禁止
+
+- 不要默认使用 `mingw73_64` / MinGW
+- 不要使用不存在的 `C:\Qt\...` 路径

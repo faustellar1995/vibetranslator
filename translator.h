@@ -3,7 +3,7 @@
 #include <QTimer>
 #include <QThread>
 #include "translatebubble.h"
-#include "deepseek.h"
+#include "mimo.h"
 #include "config.h"
 
 // 翻译控制器：
@@ -77,5 +77,5 @@ private:
     QTimer m_autoTimer;
     IUIAutomation *m_uia = nullptr;
     QThread m_workerThread;
-    DeepSeekWorker *m_worker = nullptr;
+    MimoWorker *m_worker = nullptr;
 };

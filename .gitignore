@@ -1,14 +1,40 @@
 # ---- 构建产物 ----
 build/
 dist/
+out/
+.vs/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeScripts/
+Makefile
+*.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
 *.o
 *.obj
 *.exe
 *.dll
 *.a
 *.lib
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.iobj
+*.ipdb
 
-# ---- 运行生成的配置与测试文件 ----
+# ---- Qt / 自动生成 ----
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*_autogen/
+*.qmlc
+*.jsc
+
+# ---- 运行生成的配置与日志 ----
 translator_config.json
 test_results.txt
 *.log
@@ -20,9 +46,12 @@ test_results.txt
 *.pro.user
 CMakeLists.txt.user*
 .cache/
-compile_commands.json
+.cursor/*
+!.cursor/rules/
 
-# ---- 临时文件 ----
+# ---- 临时 / 本机调试脚本 ----
+*.bat
+*.sh
 *.tmp
 ~$*
 *.swp

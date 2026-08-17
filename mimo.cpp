@@ -1,4 +1,4 @@
-#include "deepseek.h"
+#include "mimo.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -12,13 +12,13 @@
 #include <string>
 #include <vector>
 
-DeepSeekWorker::DeepSeekWorker(QObject *parent) : QObject(parent) {}
+MimoWorker::MimoWorker(QObject *parent) : QObject(parent) {}
 
-void DeepSeekWorker::translate(const QString &text, const QString &systemPrompt,
-                               const QString &apiKey) {
+void MimoWorker::translate(const QString &text, const QString &systemPrompt,
+                           const QString &apiKey) {
     const QString key = apiKey.trimmed();
     if (key.isEmpty()) {
-        emit failure(QStringLiteral("未设置 API Key（请在主界面设置，或配置环境变量 DS_KEY）"));
+        emit failure(QStringLiteral("未设置 API Key（请在主界面设置，或配置环境变量 MIMO_KEY）"));
         return;
     }
 
@@ -32,8 +32,9 @@ void DeepSeekWorker::translate(const QString &text, const QString &systemPrompt,
     msgs.append(sys);
     msgs.append(usr);
 
+    // 默认模型 mimo-v2.5（RPM 100 / TPM 10M，见官方 Rate Limit 文档）
     QJsonObject body;
-    body[QStringLiteral("model")] = QStringLiteral("deepseek-chat");
+    body[QStringLiteral("model")] = QStringLiteral("mimo-v2.5");
     body[QStringLiteral("messages")] = msgs;
     body[QStringLiteral("temperature")] = 0.3;
     body[QStringLiteral("stream")] = false;
@@ -45,14 +46,15 @@ void DeepSeekWorker::translate(const QString &text, const QString &systemPrompt,
         emit failure(QStringLiteral("WinHttpOpen 失败 (错误码 %1)").arg((int)GetLastError()));
         return;
     }
-    HINTERNET hConnect = WinHttpConnect(hSession, L"api.deepseek.com",
+    // OpenAI 兼容：https://api.xiaomimimo.com/v1/chat/completions
+    HINTERNET hConnect = WinHttpConnect(hSession, L"api.xiaomimimo.com",
                                         INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) {
         emit failure(QStringLiteral("WinHttpConnect 失败 (错误码 %1)").arg((int)GetLastError()));
         WinHttpCloseHandle(hSession);
         return;
     }
-    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", L"/chat/completions", nullptr,
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", L"/v1/chat/completions", nullptr,
                                             WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
                                             WINHTTP_FLAG_SECURE);
     if (!hRequest) {

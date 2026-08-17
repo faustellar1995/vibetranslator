@@ -1,17 +1,19 @@
+#ifdef _WIN32
+// 必须在任何 Qt 头之前包含：Qt 可能破坏 COM 的 interface 宏
+#include <windows.h>
+#include <objbase.h>
+#include <oleauto.h>
+#include <UIAutomation.h>
+#endif
+
 #include "translator.h"
 
 #include <QApplication>
+#include <QGuiApplication>
 #include <QMetaObject>
 #include <QClipboard>
 #include <QScreen>
 #include <QCursor>
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-// UIA 客户端头文件（本地 3rdparty 拷贝自新版 mingw-w64，7.3 编译器可用）
-#define INITGUID
-#include "uiautomationclient.h"
-#endif
 
 namespace {
 // 获取当前真正拥有键盘焦点的窗口（跨进程可靠）
@@ -47,10 +49,10 @@ Translator::Translator(TranslateBubble *bubble, QObject *parent)
 
     connect(&m_autoTimer, &QTimer::timeout, this, &Translator::autoTick);
 
-    m_worker = new DeepSeekWorker;
+    m_worker = new MimoWorker;
     m_worker->moveToThread(&m_workerThread);
-    connect(m_worker, &DeepSeekWorker::success, this, &Translator::translated);
-    connect(m_worker, &DeepSeekWorker::failure, this, &Translator::failed);
+    connect(m_worker, &MimoWorker::success, this, &Translator::translated);
+    connect(m_worker, &MimoWorker::failure, this, &Translator::failed);
     connect(this, &Translator::translated, this, &Translator::onResult);
     connect(this, &Translator::failed, this, &Translator::onError);
     m_workerThread.start();

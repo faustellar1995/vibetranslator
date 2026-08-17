@@ -96,12 +96,12 @@ MainWindow::MainWindow(Translator *translator, Config *config)
     autoRow->addStretch(1);
     root->addLayout(autoRow);
 
-    // API Key 设置行（优先使用环境变量 DS_KEY）
+    // API Key 设置行（优先使用环境变量 MIMO_KEY）
     auto *keyRow = new QHBoxLayout;
     keyRow->addWidget(new QLabel(QStringLiteral("API Key:")));
     m_apiKeyEdit = new QLineEdit;
     m_apiKeyEdit->setEchoMode(QLineEdit::Password);
-    m_apiKeyEdit->setPlaceholderText(QStringLiteral("sk-… 留空则使用环境变量 DS_KEY"));
+    m_apiKeyEdit->setPlaceholderText(QStringLiteral("sk-… 留空则使用环境变量 MIMO_KEY"));
     m_apiKeyEdit->setText(m_config->apiKey);
     keyRow->addWidget(m_apiKeyEdit, 3);
     m_showKeyCheck = new QCheckBox(QStringLiteral("显示"));
@@ -187,17 +187,17 @@ void MainWindow::reloadPresets(const QString &selectName) {
 }
 
 void MainWindow::updateKeyLabel() {
-    const QByteArray env = qgetenv("DS_KEY").trimmed();
+    const QByteArray env = qgetenv("MIMO_KEY").trimmed();
     const QString saved = m_config->apiKey.trimmed();
     if (!env.isEmpty()) {
-        m_keyLabel->setText(QStringLiteral("DS_KEY 环境变量已设置 ✓（优先使用）"));
+        m_keyLabel->setText(QStringLiteral("MIMO_KEY 环境变量已设置 ✓（优先使用）"));
         m_keyLabel->setStyleSheet(QStringLiteral("color:#3c9e4a;"));
     } else if (!saved.isEmpty()) {
         m_keyLabel->setText(QStringLiteral("使用已保存的 API Key（…%1）").arg(saved.right(6)));
         m_keyLabel->setStyleSheet(QStringLiteral("color:#3c9e4a;"));
     } else {
         m_keyLabel->setText(
-            QStringLiteral("⚠ 未设置 API Key：请在上方输入并保存，或配置环境变量 DS_KEY"));
+            QStringLiteral("⚠ 未设置 API Key：请在上方输入并保存，或配置环境变量 MIMO_KEY"));
         m_keyLabel->setStyleSheet(QStringLiteral("color:#c0392b;"));
     }
 }
@@ -358,7 +358,8 @@ void MainWindow::showHelp() {
         "</ul>"
         "<p><b>API Key</b></p>"
         "<ul>"
-        "<li>优先使用环境变量 <b>DS_KEY</b>；也可以在主界面输入 Key 后点「保存」（自动存取）。</li>"
+        "<li>优先使用环境变量 <b>MIMO_KEY</b>；也可以在主界面输入 Key 后点「保存」（自动存取）。</li>"
+        "<li>默认模型：小米 MiMo <b>mimo-v2.5</b>（OpenAI 兼容 API）。</li>"
         "</ul>"
         "<p><b>Prompt 与预设</b></p>"
         "<ul>"
